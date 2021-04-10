@@ -15,7 +15,18 @@ use std::str;
 use tree_sitter::{Language, LogType, Parser, Query};
 use walkdir::WalkDir;
 
+const RESERVED_REGEX_CHARS : &[&str] = &[
+    r"\.",  r"\(",  r"\)",  r"\[",  r"\]",
+    r"\|",  r"\{",  r"\}",  r"\*",  r"\+",
+    r"\?",  r"\^",  r"\$",  r"\/",  r"\-",
+    r"\\"
+];
+
 lazy_static! {
+    static ref FIRST_HEADER_REGEX: ByteRegex = ByteRegexBuilder::new(r"^===+(?P<suffix>[^=\r\n]*)")
+        .multi_line(true)
+        .build()
+        .unwrap();
     static ref HEADER_REGEX: ByteRegex = ByteRegexBuilder::new(r"^===+\r?\n([^=]*)\r?\n===+\r?\n")
         .multi_line(true)
         .build()
@@ -27,6 +38,11 @@ lazy_static! {
     static ref COMMENT_REGEX: Regex = Regex::new(r"(?m)^\s*;.*$").unwrap();
     static ref WHITESPACE_REGEX: Regex = Regex::new(r"\s+").unwrap();
     static ref SEXP_FIELD_REGEX: Regex = Regex::new(r" \w+: \(").unwrap();
+    static ref RESERVED_REGEX_CHARS_REGEXES: Vec<(&'static str, Regex)> =
+        RESERVED_REGEX_CHARS
+            .into_iter()
+            .map(|c| (*c, Regex::new(c).unwrap()))
+            .collect();
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -369,11 +385,37 @@ pub fn strip_sexp_fields(sexp: String) -> String {
     SEXP_FIELD_REGEX.replace_all(&sexp, " (").to_string()
 }
 
+fn escape_reserved_regex_chars(text : String) -> String {
+    let reserved_chars : Vec<&str> = vec![
+        r"\.",  r"\(",  r"\)",  r"\[",  r"\]",
+        r"|",   r"\{",  r"\}",  r"\*",  r"\+",
+        r"\?",  r"\^",  r"\$",  r"\/",  r"\-",
+        r"\\"];
+
+    for (c, r) in RESERVED_REGEX_CHARS_REGEXES.iter() {
+        text = r.replace_all(&*text, c).to_string();
+    }
+
+    return text;
+}
+
 fn parse_test_content(name: String, content: String, file_path: Option<PathBuf>) -> TestEntry {
     let mut children = Vec::new();
     let bytes = content.as_bytes();
     let mut prev_name = String::new();
     let mut prev_header_end = 0;
+
+    let suffix = FIRST_HEADER_REGEX
+        .captures(bytes)
+        .and_then(|c| c.name("suffix"))
+        .map(|m| &bytes[m.range()])
+        .map(|b| String::from_utf8_lossy(b).to_string())
+        .map(|s| escape_reserved_regex_chars(s));
+
+    let headerRegex = suffix
+        .map(|s| r"^===+\" + s + "r?\n([^=]*)\r?\n===+\r?\n");
+        //.map(|s| ByteRegexBuilder::new())
+        //.or(FIRST_HEADER_REGEX);
 
     // Identify all of the test descriptions using the `======` headers.
     for (header_start, header_end) in HEADER_REGEX
