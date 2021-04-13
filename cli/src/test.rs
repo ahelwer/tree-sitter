@@ -15,11 +15,14 @@ use std::str;
 use tree_sitter::{Language, LogType, Parser, Query};
 use walkdir::WalkDir;
 
+// Characters with special meaning in a regex.
+// It is important that "\" is first in this list, since the list is iterated
+// through & used to escape characters in a string; if "\" does not go first
+// then it will re-escape the "\" used to escape another character.
 const RESERVED_REGEX_CHARS : &[&str] = &[
-    r"\.",  r"\(",  r"\)",  r"\[",  r"\]",
+    r"\\",  r"\(",  r"\)",  r"\[",  r"\]",
     r"\|",  r"\{",  r"\}",  r"\*",  r"\+",
-    r"\?",  r"\^",  r"\$",  r"\/",  r"\-",
-    r"\\"
+    r"\?",  r"\^",  r"\$",  r"\.",  r"\-"
 ];
 
 lazy_static! {
@@ -385,18 +388,13 @@ pub fn strip_sexp_fields(sexp: String) -> String {
     SEXP_FIELD_REGEX.replace_all(&sexp, " (").to_string()
 }
 
-fn escape_reserved_regex_chars(text : String) -> String {
-    let reserved_chars : Vec<&str> = vec![
-        r"\.",  r"\(",  r"\)",  r"\[",  r"\]",
-        r"|",   r"\{",  r"\}",  r"\*",  r"\+",
-        r"\?",  r"\^",  r"\$",  r"\/",  r"\-",
-        r"\\"];
-
+fn escape_reserved_regex_chars(text : &str) -> String {
+    let mut escaped = String::from(text);
     for (c, r) in RESERVED_REGEX_CHARS_REGEXES.iter() {
-        text = r.replace_all(&*text, c).to_string();
+        escaped = r.replace_all(&escaped[..], *c).to_string();
     }
 
-    return text;
+    return escaped;
 }
 
 fn parse_test_content(name: String, content: String, file_path: Option<PathBuf>) -> TestEntry {
@@ -410,15 +408,21 @@ fn parse_test_content(name: String, content: String, file_path: Option<PathBuf>)
         .and_then(|c| c.name("suffix"))
         .map(|m| &bytes[m.range()])
         .map(|b| String::from_utf8_lossy(b).to_string())
-        .map(|s| escape_reserved_regex_chars(s));
+        .map(|s| escape_reserved_regex_chars(&s));
+    
+    let suffixHeaderPattern : Option<String> = suffix
+        .map(|s| String::from(r"^===+") + &s + r"\r?\n([^=]*)\r?\n===+" + &s + r"\r?\n");
+    
+    let suffixDividerPattern: Option<String> = suffix
+        .map(|s| String::from(r"^---+") + &s + r"\r?\n");
 
-    let headerRegex = suffix
-        .map(|s| r"^===+\" + s + "r?\n([^=]*)\r?\n===+\r?\n");
-        //.map(|s| ByteRegexBuilder::new())
-        //.or(FIRST_HEADER_REGEX);
+    let headerRegex = suffixHeaderPattern
+        .and_then(|s| ByteRegexBuilder::new(&s[..]).multi_line(true).build().ok())
+        .as_ref()
+        .unwrap_or(&HEADER_REGEX);
 
     // Identify all of the test descriptions using the `======` headers.
-    for (header_start, header_end) in HEADER_REGEX
+    for (header_start, header_end) in headerRegex
         .find_iter(&bytes)
         .map(|m| (m.start(), m.end()))
         .chain(Some((bytes.len(), bytes.len())))
