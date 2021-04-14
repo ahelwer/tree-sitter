@@ -14,22 +14,12 @@ use std::str;
 use tree_sitter::{Language, LogType, Parser, Query};
 use walkdir::WalkDir;
 
-// Characters with special meaning in a regex.
-// It is important that "\" is first in this list, since the list is iterated
-// through & used to escape characters in a string; if "\" does not go first
-// then it will re-escape the "\" used to escape another character.
-const RESERVED_REGEX_CHARS : &[&str] = &[
-    r"\\",  r"\(",  r"\)",  r"\[",  r"\]",
-    r"\|",  r"\{",  r"\}",  r"\*",  r"\+",
-    r"\?",  r"\^",  r"\$",  r"\.",  r"\-"
-];
-
 lazy_static! {
-    static ref FIRST_HEADER_REGEX: ByteRegex = ByteRegexBuilder::new(r"^===+(?P<suffix>[^=\r]*)\r?\n")
+    static ref FIRST_HEADER_REGEX: ByteRegex = ByteRegexBuilder::new(r"^===+(?P<suffix>[^=\r\n]*)\r?\n")
         .multi_line(true)
         .build()
         .unwrap();
-    static ref HEADER_REGEX: ByteRegex = ByteRegexBuilder::new(r"^===+\r?\n(?P<test_name>[^=\r]*)\r?\n===+\r?\n")
+    static ref HEADER_REGEX: ByteRegex = ByteRegexBuilder::new(r"^===+\r?\n(?P<test_name>[^=\r\n]*)\r?\n===+\r?\n")
         .multi_line(true)
         .build()
         .unwrap();
@@ -40,11 +30,6 @@ lazy_static! {
     static ref COMMENT_REGEX: Regex = Regex::new(r"(?m)^\s*;.*$").unwrap();
     static ref WHITESPACE_REGEX: Regex = Regex::new(r"\s+").unwrap();
     static ref SEXP_FIELD_REGEX: Regex = Regex::new(r" \w+: \(").unwrap();
-    static ref RESERVED_REGEX_CHARS_REGEXES: Vec<(&'static str, Regex)> =
-        RESERVED_REGEX_CHARS
-            .into_iter()
-            .map(|c| (*c, Regex::new(c).unwrap()))
-            .collect();
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -387,15 +372,6 @@ pub fn strip_sexp_fields(sexp: String) -> String {
     SEXP_FIELD_REGEX.replace_all(&sexp, " (").to_string()
 }
 
-fn escape_reserved_regex_chars(text : &str) -> String {
-    let mut escaped = String::from(text);
-    for (c, r) in RESERVED_REGEX_CHARS_REGEXES.iter() {
-        escaped = r.replace_all(&escaped[..], *c).to_string();
-    }
-
-    return escaped;
-}
-
 fn parse_test_content(name: String, content: String, file_path: Option<PathBuf>) -> TestEntry {
     let mut children = Vec::new();
     let bytes = content.as_bytes();
@@ -407,11 +383,11 @@ fn parse_test_content(name: String, content: String, file_path: Option<PathBuf>)
         .and_then(|c| c.name("suffix"))
         .map(|m| &bytes[m.range()])
         .map(|b| String::from_utf8_lossy(b).to_string())
-        .map(|s| escape_reserved_regex_chars(&s));
+        .map(|s| regex::escape(&s[..]));
     
     let suffix_header_pattern : Option<String> = suffix
         .as_ref()
-        .map(|s| String::from(r"^===+") + s + r"\r?\n(?P<test_name>[^\r]*)\r?\n===+" + s + r"\r?\n");
+        .map(|s| String::from(r"^===+") + s + r"\r?\n(?P<test_name>[^\r\n]*)\r?\n===+" + s + r"\r?\n");
     
     let header_regex_from_suffix_header_pattern = suffix_header_pattern
             .as_ref()
@@ -727,6 +703,90 @@ code
                         name: "sexp with ';'".to_string(),
                         input: "code".as_bytes().to_vec(),
                         output: "(MISSING \";\")".to_string(),
+                        has_fields: false,
+                    }
+                ],
+                file_path: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_test_content_with_suffixes() {
+        let entry = parse_test_content(
+            "the-filename".to_string(),
+            r#"
+==================asdf\()[]|{}*+?^$.-
+First test
+==================asdf\()[]|{}*+?^$.-
+
+=========================
+NOT A TEST HEADER
+=========================
+-------------------------
+
+---asdf\()[]|{}*+?^$.-
+
+(a)
+
+==================asdf\()[]|{}*+?^$.-
+Second test
+==================asdf\()[]|{}*+?^$.-
+
+=========================
+NOT A TEST HEADER
+=========================
+-------------------------
+
+---asdf\()[]|{}*+?^$.-
+
+(a)
+
+=========================asdf\()[]|{}*+?^$.-
+Test name with = symbol
+=========================asdf\()[]|{}*+?^$.-
+
+=========================
+NOT A TEST HEADER
+=========================
+-------------------------
+
+---asdf\()[]|{}*+?^$.-
+
+(a)
+        "#
+            .trim()
+            .to_string(),
+            None,
+        );
+
+        let expected_input =
+            "\n=========================\n\
+            NOT A TEST HEADER\n\
+            =========================\n\
+            -------------------------\n"
+                .as_bytes().to_vec();
+        assert_eq!(
+            entry,
+            TestEntry::Group {
+                name: "the-filename".to_string(),
+                children: vec![
+                    TestEntry::Example {
+                        name: "First test".to_string(),
+                        input: expected_input.clone(),
+                        output: "(a)".to_string(),
+                        has_fields: false,
+                    },
+                    TestEntry::Example {
+                        name: "Second test".to_string(),
+                        input: expected_input.clone(),
+                        output: "(a)".to_string(),
+                        has_fields: false,
+                    },
+                    TestEntry::Example {
+                        name: "Test name with = symbol".to_string(),
+                        input: expected_input.clone(),
+                        output: "(a)".to_string(),
                         has_fields: false,
                     }
                 ],
