@@ -411,7 +411,7 @@ fn parse_test_content(name: String, content: String, file_path: Option<PathBuf>)
     
     let suffix_header_pattern : Option<String> = suffix
         .as_ref()
-        .map(|s| String::from(r"^===+") + s + r"\r?\n(?P<test_name>[^=\r]*)\r?\n===+" + s + r"\r?\n");
+        .map(|s| String::from(r"^===+") + s + r"\r?\n(?P<test_name>[^\r]*)\r?\n===+" + s + r"\r?\n");
     
     let header_regex_from_suffix_header_pattern = suffix_header_pattern
             .as_ref()
