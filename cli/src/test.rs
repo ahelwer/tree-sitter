@@ -5,7 +5,6 @@ use difference::{Changeset, Difference};
 use lazy_static::lazy_static;
 use regex::bytes::{Regex as ByteRegex, RegexBuilder as ByteRegexBuilder};
 use regex::Regex;
-use std::char;
 use std::ffi::OsStr;
 use std::fmt::Write as FmtWrite;
 use std::fs;
@@ -26,11 +25,11 @@ const RESERVED_REGEX_CHARS : &[&str] = &[
 ];
 
 lazy_static! {
-    static ref FIRST_HEADER_REGEX: ByteRegex = ByteRegexBuilder::new(r"^===+(?P<suffix>[^=\r\n]*)")
+    static ref FIRST_HEADER_REGEX: ByteRegex = ByteRegexBuilder::new(r"^===+(?P<suffix>[^=\r\n]*)\r?\n")
         .multi_line(true)
         .build()
         .unwrap();
-    static ref HEADER_REGEX: ByteRegex = ByteRegexBuilder::new(r"^===+\r?\n([^=]*)\r?\n===+\r?\n")
+    static ref HEADER_REGEX: ByteRegex = ByteRegexBuilder::new(r"^===+\r?\n(?P<testname>[^=\r\n]*)\r?\n===+\r?\n")
         .multi_line(true)
         .build()
         .unwrap();
@@ -410,27 +409,50 @@ fn parse_test_content(name: String, content: String, file_path: Option<PathBuf>)
         .map(|b| String::from_utf8_lossy(b).to_string())
         .map(|s| escape_reserved_regex_chars(&s));
     
-    let suffixHeaderPattern : Option<String> = suffix
-        .map(|s| String::from(r"^===+") + &s + r"\r?\n([^=]*)\r?\n===+" + &s + r"\r?\n");
+    let suffix_header_pattern : Option<String> = suffix
+        .as_ref()
+        .map(|s| String::from(r"^===+") + s + r"\r?\n(?P<testname>[^=\r\n]*)\r?\n===+" + s + r"\r?\n");
     
-    let suffixDividerPattern: Option<String> = suffix
-        .map(|s| String::from(r"^---+") + &s + r"\r?\n");
+    let header_regex_from_suffix_header_pattern = suffix_header_pattern
+            .as_ref()
+            .and_then(|s| ByteRegexBuilder::new(&s[..])
+                .multi_line(true)
+                .build()
+                .ok()
+            );
 
-    let headerRegex = suffixHeaderPattern
-        .and_then(|s| ByteRegexBuilder::new(&s[..]).multi_line(true).build().ok())
+    let header_regex = header_regex_from_suffix_header_pattern
         .as_ref()
         .unwrap_or(&HEADER_REGEX);
 
+    let suffix_divider_pattern: Option<String> = suffix
+        .as_ref()
+        .map(|s| String::from(r"^---+") + s + r"\r?\n");
+    
+    let divider_regex_from_suffix_divider_pattern = suffix_divider_pattern
+        .as_ref()
+        .and_then(|s| ByteRegexBuilder::new(&s[..])
+            .multi_line(true)
+            .build()
+            .ok()
+        );
+    
+    let divider_regex = divider_regex_from_suffix_divider_pattern
+        .as_ref()
+        .unwrap_or(&DIVIDER_REGEX);
+
     // Identify all of the test descriptions using the `======` headers.
-    for (header_start, header_end) in headerRegex
+    // Must be followed by custom suffix if defined on first header.
+    for (header_start, header_end) in header_regex
         .find_iter(&bytes)
         .map(|m| (m.start(), m.end()))
         .chain(Some((bytes.len(), bytes.len())))
     {
         // Find the longest line of dashes following each test description.
         // That is the divider between input and expected output.
+        // Must be followed by custom suffix if defined on first header.
         if prev_header_end > 0 {
-            let divider_match = DIVIDER_REGEX
+            let divider_match = divider_regex
                 .find_iter(&bytes[prev_header_end..header_start])
                 .map(|m| (prev_header_end + m.start(), prev_header_end + m.end()))
                 .max_by_key(|(start, end)| end - start);
@@ -463,9 +485,12 @@ fn parse_test_content(name: String, content: String, file_path: Option<PathBuf>)
                 }
             }
         }
-        prev_name = String::from_utf8_lossy(&bytes[header_start..header_end])
-            .trim_matches(|c| char::is_whitespace(c) || c == '=')
-            .to_string();
+        prev_name = header_regex
+            .captures(&bytes[header_start..header_end])
+            .and_then(|c| c.name("testname"))
+            .map(|m| &bytes[header_start + m.start() .. header_start + m.end()])
+            .map(|b| String::from_utf8_lossy(b).to_string())
+            .unwrap_or(String::from(""));
         prev_header_end = header_end;
     }
     TestEntry::Group {
