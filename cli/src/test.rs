@@ -25,11 +25,11 @@ const RESERVED_REGEX_CHARS : &[&str] = &[
 ];
 
 lazy_static! {
-    static ref FIRST_HEADER_REGEX: ByteRegex = ByteRegexBuilder::new(r"^===+(?P<suffix>[^=\r\n]*)\r?\n")
+    static ref FIRST_HEADER_REGEX: ByteRegex = ByteRegexBuilder::new(r"^===+(?P<suffix>[^=\r]*)\r?\n")
         .multi_line(true)
         .build()
         .unwrap();
-    static ref HEADER_REGEX: ByteRegex = ByteRegexBuilder::new(r"^===+\r?\n(?P<testname>[^=\r\n]*)\r?\n===+\r?\n")
+    static ref HEADER_REGEX: ByteRegex = ByteRegexBuilder::new(r"^===+\r?\n(?P<testname>[^=\r]*)\r?\n===+\r?\n")
         .multi_line(true)
         .build()
         .unwrap();
@@ -411,7 +411,7 @@ fn parse_test_content(name: String, content: String, file_path: Option<PathBuf>)
     
     let suffix_header_pattern : Option<String> = suffix
         .as_ref()
-        .map(|s| String::from(r"^===+") + s + r"\r?\n(?P<testname>[^=\r\n]*)\r?\n===+" + s + r"\r?\n");
+        .map(|s| String::from(r"^===+") + s + r"\r?\n(?P<testname>[^=\r]*)\r?\n===+" + s + r"\r?\n");
     
     let header_regex_from_suffix_header_pattern = suffix_header_pattern
             .as_ref()
@@ -443,10 +443,11 @@ fn parse_test_content(name: String, content: String, file_path: Option<PathBuf>)
 
     // Identify all of the test descriptions using the `======` headers.
     // Must be followed by custom suffix if defined on first header.
-    for (header_start, header_end) in header_regex
-        .find_iter(&bytes)
-        .map(|m| (m.start(), m.end()))
-        .chain(Some((bytes.len(), bytes.len())))
+    // Capture index 0 corresponds to entire match and is guaranteed to exist.
+    for (header_start, header_end, capture) in header_regex
+        .captures_iter(&bytes)
+        .map(|c| (c.get(0).unwrap().start(), c.get(0).unwrap().end(), c.name("testname")))
+        .chain(Some((bytes.len(), bytes.len(), None)))
     {
         // Find the longest line of dashes following each test description.
         // That is the divider between input and expected output.
@@ -485,12 +486,10 @@ fn parse_test_content(name: String, content: String, file_path: Option<PathBuf>)
                 }
             }
         }
-        prev_name = header_regex
-            .captures(&bytes[header_start..header_end])
-            .and_then(|c| c.name("testname"))
-            .map(|m| &bytes[header_start + m.start() .. header_start + m.end()])
+        prev_name = capture
+            .map(|m| &bytes[m.range()])
             .map(|b| String::from_utf8_lossy(b).to_string())
-            .unwrap_or(String::from(""));
+            .unwrap_or(String::new());
         prev_header_end = header_end;
     }
     TestEntry::Group {
