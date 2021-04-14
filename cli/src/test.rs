@@ -29,7 +29,7 @@ lazy_static! {
         .multi_line(true)
         .build()
         .unwrap();
-    static ref HEADER_REGEX: ByteRegex = ByteRegexBuilder::new(r"^===+\r?\n(?P<testname>[^=\r]*)\r?\n===+\r?\n")
+    static ref HEADER_REGEX: ByteRegex = ByteRegexBuilder::new(r"^===+\r?\n(?P<test_name>[^=\r]*)\r?\n===+\r?\n")
         .multi_line(true)
         .build()
         .unwrap();
@@ -411,7 +411,7 @@ fn parse_test_content(name: String, content: String, file_path: Option<PathBuf>)
     
     let suffix_header_pattern : Option<String> = suffix
         .as_ref()
-        .map(|s| String::from(r"^===+") + s + r"\r?\n(?P<testname>[^=\r]*)\r?\n===+" + s + r"\r?\n");
+        .map(|s| String::from(r"^===+") + s + r"\r?\n(?P<test_name>[^=\r]*)\r?\n===+" + s + r"\r?\n");
     
     let header_regex_from_suffix_header_pattern = suffix_header_pattern
             .as_ref()
@@ -446,7 +446,7 @@ fn parse_test_content(name: String, content: String, file_path: Option<PathBuf>)
     // Capture index 0 corresponds to entire match and is guaranteed to exist.
     for (header_start, header_end, capture) in header_regex
         .captures_iter(&bytes)
-        .map(|c| (c.get(0).unwrap().start(), c.get(0).unwrap().end(), c.name("testname")))
+        .map(|c| (c.get(0).unwrap().start(), c.get(0).unwrap().end(), c.name("test_name")))
         .chain(Some((bytes.len(), bytes.len(), None)))
     {
         // Find the longest line of dashes following each test description.
