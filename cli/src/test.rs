@@ -420,7 +420,7 @@ fn parse_test_content(name: String, content: String, file_path: Option<PathBuf>)
     // Identify all of the test descriptions using the `======` headers.
     // Must be followed by custom suffix if defined on first header.
     // Capture index 0 corresponds to entire match and is guaranteed to exist.
-    for (header_start, header_end, capture) in header_regex
+    for (header_start, header_end, test_name_capture) in header_regex
         .captures_iter(&bytes)
         .map(|c| (c.get(0).unwrap().start(), c.get(0).unwrap().end(), c.name("test_name")))
         .chain(Some((bytes.len(), bytes.len(), None)))
@@ -462,7 +462,7 @@ fn parse_test_content(name: String, content: String, file_path: Option<PathBuf>)
                 }
             }
         }
-        prev_name = capture
+        prev_name = test_name_capture
             .map(|m| &bytes[m.range()])
             .map(|b| String::from_utf8_lossy(b).to_string())
             .unwrap_or(String::new());
