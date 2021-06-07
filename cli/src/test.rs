@@ -15,14 +15,16 @@ use tree_sitter::{Language, LogType, Parser, Query};
 use walkdir::WalkDir;
 
 lazy_static! {
-    static ref FIRST_HEADER_REGEX: ByteRegex = ByteRegexBuilder::new(r"^===+(?P<suffix>[^=\r\n]*)\r?\n")
-        .multi_line(true)
-        .build()
-        .unwrap();
-    static ref HEADER_REGEX: ByteRegex = ByteRegexBuilder::new(r"^===+\r?\n(?P<test_name>[^=\r\n]*)\r?\n===+\r?\n")
-        .multi_line(true)
-        .build()
-        .unwrap();
+    static ref FIRST_HEADER_REGEX: ByteRegex =
+        ByteRegexBuilder::new(r"^===+(?P<suffix>[^=\r\n]*)\r?\n")
+            .multi_line(true)
+            .build()
+            .unwrap();
+    static ref HEADER_REGEX: ByteRegex =
+        ByteRegexBuilder::new(r"^===+\r?\n(?P<test_name>[^=\r\n]*)\r?\n===+\r?\n")
+            .multi_line(true)
+            .build()
+            .unwrap();
     static ref DIVIDER_REGEX: ByteRegex = ByteRegexBuilder::new(r"^---+\r?\n")
         .multi_line(true)
         .build()
@@ -384,18 +386,14 @@ fn parse_test_content(name: String, content: String, file_path: Option<PathBuf>)
         .map(|m| &bytes[m.range()])
         .map(|b| String::from_utf8_lossy(b).to_string())
         .map(|s| regex::escape(&s[..]));
-    
-    let suffix_header_pattern : Option<String> = suffix
-        .as_ref()
-        .map(|s| String::from(r"^===+") + s + r"\r?\n(?P<test_name>[^\r\n]*)\r?\n===+" + s + r"\r?\n");
-    
+
+    let suffix_header_pattern: Option<String> = suffix.as_ref().map(|s| {
+        String::from(r"^===+") + s + r"\r?\n(?P<test_name>[^\r\n]*)\r?\n===+" + s + r"\r?\n"
+    });
+
     let header_regex_from_suffix_header_pattern = suffix_header_pattern
-            .as_ref()
-            .and_then(|s| ByteRegexBuilder::new(&s[..])
-                .multi_line(true)
-                .build()
-                .ok()
-            );
+        .as_ref()
+        .and_then(|s| ByteRegexBuilder::new(&s[..]).multi_line(true).build().ok());
 
     let header_regex = header_regex_from_suffix_header_pattern
         .as_ref()
@@ -404,15 +402,11 @@ fn parse_test_content(name: String, content: String, file_path: Option<PathBuf>)
     let suffix_divider_pattern: Option<String> = suffix
         .as_ref()
         .map(|s| String::from(r"^---+") + s + r"\r?\n");
-    
+
     let divider_regex_from_suffix_divider_pattern = suffix_divider_pattern
         .as_ref()
-        .and_then(|s| ByteRegexBuilder::new(&s[..])
-            .multi_line(true)
-            .build()
-            .ok()
-        );
-    
+        .and_then(|s| ByteRegexBuilder::new(&s[..]).multi_line(true).build().ok());
+
     let divider_regex = divider_regex_from_suffix_divider_pattern
         .as_ref()
         .unwrap_or(&DIVIDER_REGEX);
@@ -422,7 +416,13 @@ fn parse_test_content(name: String, content: String, file_path: Option<PathBuf>)
     // Capture index 0 corresponds to entire match and is guaranteed to exist.
     for (header_start, header_end, test_name_capture) in header_regex
         .captures_iter(&bytes)
-        .map(|c| (c.get(0).unwrap().start(), c.get(0).unwrap().end(), c.name("test_name")))
+        .map(|c| {
+            (
+                c.get(0).unwrap().start(),
+                c.get(0).unwrap().end(),
+                c.name("test_name"),
+            )
+        })
         .chain(Some((bytes.len(), bytes.len(), None)))
     {
         // Find the longest line of dashes following each test description.
@@ -760,12 +760,12 @@ NOT A TEST HEADER
             None,
         );
 
-        let expected_input =
-            "\n=========================\n\
+        let expected_input = "\n=========================\n\
             NOT A TEST HEADER\n\
             =========================\n\
             -------------------------\n"
-                .as_bytes().to_vec();
+            .as_bytes()
+            .to_vec();
         assert_eq!(
             entry,
             TestEntry::Group {
