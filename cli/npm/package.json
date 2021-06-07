@@ -7,7 +7,7 @@
     "type": "git",
     "url": "http://github.com/ahelwer/tree-sitter.git"
   },
-  "description": "CLI for generating fast incremental parsers",
+  "description": "CLI for generating fast incremental parsers; includes separator upgrades for tests",
   "keywords": [
     "parser",
     "lexer"
