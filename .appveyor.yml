@@ -1,7 +1,7 @@
 build: false
 install:
   # Terminate early unless building either a tag or a PR.
-  - if "%APPVEYOR_REPO_TAG%" == "false" if not "%APPVEYOR_REPO_BRANCH%" == "master" appveyor exit
+  - if "%APPVEYOR_REPO_TAG%" == "false" if not "%APPVEYOR_REPO_BRANCH%" == "testfile-separator-package" appveyor exit
 
   # Install rust
   - appveyor DownloadFile https://win.rustup.rs/ -FileName rustup-init.exe
@@ -37,7 +37,7 @@ deploy:
   description: ''
   provider: GitHub
   auth_token:
-    secure: VC9ntV5+inKoNteZyLQksKzWMKXF46P+Jx3JHKVSfF+o1rWtZn2iIHAVsQv5LaUi
+    secure: dQwGtHZpgqqW1sx5TGsfCxZdgFTdFW87NDwA3Y+nZeKL1pqKJ7SxDAKGA3Q5JHXY
   artifact: /tree-sitter-windows-.*/
   draft: true
   force_update: true
