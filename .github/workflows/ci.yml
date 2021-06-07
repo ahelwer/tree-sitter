@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches:
-      - master
+      - testfile-separator-package
     tags:
       - v*
   pull_request:
