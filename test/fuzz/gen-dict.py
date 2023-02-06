@@ -9,7 +9,8 @@ def find_literals(literals, node):
       literals.add(node['value'])
 
     for key, value in node.iteritems():
-      find_literals(literals, value)
+      if key != 'precedences':
+        find_literals(literals, value)
 
   elif type(node) is list:
     for item in node:
@@ -21,7 +22,7 @@ def main():
     grammar = json.load(f)
 
   literals = set()
-  find_literals(literals, grammar)
+  find_literals(literals, grammar['rules'])
 
   for lit in sorted(literals):
     if lit:
