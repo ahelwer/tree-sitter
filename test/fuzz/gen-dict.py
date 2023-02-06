@@ -9,7 +9,8 @@ def find_literals(literals, node):
       literals.add(node['value'])
 
     for key, value in node.iteritems():
-      find_literals(literals, value)
+      if key != 'precedences':
+        find_literals(literals, value)
 
   elif type(node) is list:
     for item in node:
